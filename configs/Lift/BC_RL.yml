@@ -1,0 +1,141 @@
+# ===================== 基本任务与环境 =====================
+env_name: Lift
+expert_folder: human_demonstrations
+robots: UR5e
+controller_type: JOINT_VELOCITY
+seed: 42
+
+# 观测拆分（与现有数据/脚本保持一致）
+robot_obs_keys:
+  - robot0_joint_pos_cos
+  - robot0_joint_pos_sin
+obj_obs_keys:
+  - robot0_eef_pos
+  - robot0_eef_quat
+  - robot0_gripper_qpos
+  - robot0_gripper_qvel
+  - robot0_touch
+  - robot0_gripper_width
+  - cube_pos
+  - cube_quat
+  - cube_to_robot0_eef_pos
+  - cube_to_robot0_eef_quat
+  - robot0_eef_to_cube_yaw
+  - cube_to_target_pos
+
+
+# Robosuite 环境参数
+env_kwargs:
+  horizon: 300
+  table_offset: [0, 0, 0.908]
+  use_touch_obs: true
+  # gripper_types: PandaTouchGripper
+  gripper_types: Robotiq85TouchGripper
+
+# ===================== 日志/评估/保存 =====================
+suffix: BC-TD3-HYBRID          # 日志名会包含该后缀（区分于单独的TD3/BC脚本）
+logdir_prefix: null            # 默认写到 <repo>/logs/<date>/<time>_...
+evaluation:
+  interval: 10000              # 每隔多少 env 步评估一次
+  save_interval: 20000         # 每隔多少 env 步保存一次
+  episodes: 4                  # 每次评估的回合数
+save_buffer: false             # 如需调试可设为 true
+
+# ===================== 模型结构与优化器 =====================
+# 选择 agent 变体：plain / obs / obsact（与你现有BC/TD3一致）
+agent: obsact
+
+# latent 维度（obs/obsact 需要；与 BC/TD3 保持一致，保证 ckpt 可复用）
+lat_obs_dim: 6
+lat_act_dim: 6
+
+# 主干/Actor 尺寸（沿用你在 BC/TD3 中常用的 2x256 Actor、3x256 Critic/Enc-Dec）
+n_layers: 3
+hidden_dim: 256
+actor_n_layers: 3
+actor_hidden_dim: 256
+
+# 优化与TD3核心超参（统一给到 unified_controlled_rl.py）
+lr: 3e-4
+discount: 0.99
+tau: 0.002
+policy_noise: 0.2
+noise_clip: 0.5
+
+# 交互时的默认抓手维噪声（target smoothing 的抓手维依然保持 0）
+gripper_noise_std_default: 0.02
+
+# 统一批大小与缓存（两类 buffer：demo/self）
+batch_size: 512
+replay_capacity: 20000000
+also_seed_self_from_demo: true   # 用 demo 也热启动 self-buffer（便于早期 critic/actor 稳定）
+
+# ===================== 预训练复用（冻结 enc/dec/dyn） =====================
+# 会在 train_unified_reuse.py 里：
+# - 尝试加载 obs_enc/obs_dec/act_enc/act_dec/inv_dyn/fwd_dyn
+# - 同步相应 target
+# - 冻结这些模块并禁用其优化器
+pretrained_from: models/6/Reach/17-56-47_Reach_UR5e_JOINT_VELOCITY_BC/models/step_2040000
+
+# =====================（可选）SEW 正则：默认关闭 =====================
+sew:
+  enabled: false
+  lambda: 0.2
+  action_scale: 1.0
+  hz: 20.0
+  model:
+    path: models/predictor/sew_predictor_UR5e.pt
+    train: false
+
+# 仅当上面 enabled: true 时、且你要做几何一致性时需要；默认保持和你原始配置一致
+sew_geom:
+  S:
+    type: base
+    offset: [0.0, 0.0, 0.0]
+  E_joint:
+    select: by_index
+    index: 2
+    point: joint_pos
+    offset: [0.0, 0.0, 0.0]
+  W_joint:
+    select: by_index
+    index: 5
+    point: joint_pos
+    offset: [0.0, 0.0, 0.0]
+  ref_dir_local:
+    type: base
+    vec: [0.0, 0.0, 1.0]
+
+# ===================== 三阶段调度（连续日志 & 连续评估） =====================
+# 说明：
+# - bc: 只用 demo buffer 更新（不采集环境），critic 在 demo 上也做 TD 学习；beta_bc=1
+# - mix: 同步用 demo/self 两个 buffer；beta_bc 从 0.5 线性退火到 0
+# - rl: 只用 self buffer 做纯RL（beta_bc=0）
+# - 每阶段内可独立设定交互噪声 expl_noise 与抓手交互噪声 gripper_noise_std
+# - 你可以根据总训练预算调整 steps（三个阶段之和就是总步数）
+phases:
+  - name: bc
+    steps: 200000              # 建议与现有BC训练量同量级（可调大/小）
+    collect_env: false
+    beta_bc: 1.0
+    updates_per_step: 1         # 每步做几次 demo-only 更新
+    expl_noise: 0.0
+    gripper_noise_std: 0.0
+
+  - name: mix
+    steps: 200000              # 混合期（可 0.6M ~ 2M 视任务难度）
+    collect_env: true
+    beta_bc_start: 1.0
+    beta_bc_end: 0.0
+    demo_updates_per_step: 1
+    self_updates_per_step: 1
+    expl_noise: 0.1
+    gripper_noise_std: 0.02
+
+  - name: rl
+    steps: 5000000             # 纯RL期（可按预算加大，例如 10M+）
+    collect_env: true
+    beta_bc: 0.0
+    self_updates_per_step: 1
+    expl_noise: 0.1
+    gripper_noise_std: 0.02

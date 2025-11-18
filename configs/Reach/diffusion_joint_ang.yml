@@ -1,0 +1,91 @@
+# ===== Diffusion 先验预训练（动作域版：latent_act / src_act / tgt_act）=====
+expert_folder: human_demonstrations
+
+task_name: Reach
+env_name: Reach
+seed: 42
+
+src_env:
+  robot: Panda
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    - target_to_robot0_eef_pos
+    - target_pos
+
+tgt_env:
+  robot: Sawyer
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    - target_to_robot0_eef_pos
+    - target_pos
+
+# 条件键：按顺序拼接。包含 eef_action_vel 时，会在线计算 v = Jp(q) @ a_arm 并拼接。
+# 若你暂时不想要动作线速度，就维持下面两项；若想加上，请把 eef_action_vel 加进来。
+# cond_keys:
+#   # - robot0_eef_pos
+#   # - eef_action_vel   
+#   # - target_to_robot0_eef_pos
+lat_act_dim: 6
+
+lat_obs_dim: 6
+
+# 必须指向含 act_enc.pt 的目录
+src_model_dir: models/6/Reach/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/step_2000000
+
+diffusion:
+
+  cond:
+    keys:
+      - robot0_eef_pos
+      - robot0_eef_quat  
+      - eef_action_vel  
+     # - target_to_robot0_eef_pos
+  schedule_defaults: &ddpm_default
+    type: ddpm
+    T: 128
+    beta: cosine
+    loss_weight: sigma2
+
+  stats_passes: 2000
+  latent_passes: 2000
+
+  # 三路：latent_act / src_act / tgt_act
+  latent_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  src_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  tgt_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  # 训练/日志
+  val_ratio: 0.1
+  log_freq: 1000
+  save_interval: 20000
+
+suffix: diffusion_pretrain_joint_ang

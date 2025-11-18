@@ -1,0 +1,119 @@
+# configs/Reach/td3_sew.yml
+env_name: Reach
+# expert_folder: human_demonstrations
+robots: Sawyer
+controller_type: JOINT_VELOCITY
+
+total_timesteps: 2000000
+batch_size: 256
+
+robot_obs_keys:
+  - robot0_joint_pos_cos
+  - robot0_joint_pos_sin
+obj_obs_keys:
+  - target_to_robot0_eef_pos
+
+
+# —— 与当前 BC 一致，否则从 BC 冷启动会维度不匹配 ——
+lat_obs_dim: 6
+lat_act_dim: 6
+
+env_kwargs:
+  horizon: 200
+  table_full_size: [0.6, 0.6, 0.05]
+
+seed: 42
+save_buffer: false
+logdir_prefix: null
+suffix: TD3_Sawyer
+
+# ===== TD3 基本超参（你的 td3_fixed.py 会读取）=====
+discount: 0.99
+tau: 0.005
+expl_noise: 0.05
+policy_noise: 0.2
+noise_clip: 0.5
+actor_update_freq: 2
+critic_update_freq: 1
+n_layers: 3
+hidden_dim: 256
+actor_n_layers: 2
+actor_hidden_dim: 256
+
+# ===== 从 BC 冷启动（会在 train_rl_reuse.py 里复用并冻结 enc/dec 等）=====
+
+pretrained_from: logs/11.09.2025/17-43-20_Reach_Sawyer_JOINT_VELOCITY_BC_Sawyer/models/step_1520000
+
+use_demos_in_rl: true
+
+# ====== SEW：只加载并冻结小模型 + 在 actor loss 里加 L_sew 简单正则 ======
+sew:
+  enabled: false
+  lambda: 0.2       # TD3 的 actor loss 上的 SEW 权重（和 BC 对齐起步）
+
+  model:
+    # 用你 BC 里保存的小模型（如果路径不同，改成实际的）
+    path: models/predictor/sew_predictor_UR5e.pt
+    train: false    # RL 阶段不训练，只加载冻结
+
+# ====== SEW 几何定义（与 BC 保持一致；E/W 索引 0 起算，7 轴则 6 是最后一关节）=====
+sew_geom:
+  S:
+    type: base
+    offset: [0.0, 0.0, 0.0]
+  E_joint:
+    select: by_index
+    index: 2
+    point: joint_pos
+    offset: [0.0, 0.0, 0.0]
+  W_joint:
+    select: by_index
+    index: 5
+    point: joint_pos
+    offset: [0.0, 0.0, 0.0]
+  ref_dir_local:
+    type: base
+    vec: [0.0, 0.0, 1.0]
+
+
+# ===== 仅 RL 新三阶段逻辑使用 =====
+# pretrain:
+#   actor_from: models/6/Reach/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/step_2000000   # 只给“目录”，脚本会在目录下找 actor.pt / policy.pt
+#   grip_from: models/6/Reach/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/step_2000000           # 可选：若你想复用 gripper 的 BC 初值，给目录；不想就设 null
+#   adaptive_build: true      # 按 state_dict 维度自适应重建 actor
+
+# phases:
+#   rollout_episodes: 10000     # Phase 1：先滚够多少条完整 episode
+#   min_buffer: 50000         # Phase 2 前缓冲区至少多少条 transition（与 batch_size 对齐）
+#   critic_pretrain_steps: 2000000  # Phase 2：只训 critic 步数
+#   exploration_rollout: 0.10 # Phase 1/2 数据收集期叠加强噪声（actor 冻结不怕）
+#   actor_freeze_steps: 5000  # Phase 3a：进入 RL 后继续只训 critic 若干步，再放开 actor；0 表示直接放开
+
+# freeze:
+#   actor: true               # 预训练加载后，默认先冻结 actor（Phase1/2/3a 生效）
+#   gripper: true             # 全程冻结 gripper（只前向）；若想让它学，把这项设为 false
+#   dyn_cons: false            # Phase1/2 禁止自监督；Phase3 可由主脚本再决定（如果 enc/dec 已冻结，此项等价于冗余）
+
+# safety:
+#   target_update_in_phase2: critic   # critic | all | none
+#   anchor_lambda: 0.0         # Phase 3 开始的 anchor 正则强度；>0 时启用“平滑放开”
+#   anchor_decay: 0.995        # anchor 系数的指数衰减率
+
+# 可选：评估相关（主脚本有默认值，你也可以显式加上）
+evaluation:
+  interval: 10000
+  save_interval: 20000
+
+
+# 可选：独立的 gripper 学习率（Obs/ObsAct 生效；plain 忽略）
+grip_lr: 0.001
+
+# =====================================================================
+# =================== 仅“新脚本”（train_rl_batch.py）读取 ===================
+# =====================================================================
+epoch_steps: 2500          # 每个 epoch 收集的环境步数
+trains_per_epoch: 1000     # 每个 epoch 的 update 次数
+max_path_length: 200       # 一般与 horizon 一致
+eval_episodes: 5
+save_every_epochs: 10
+replay_capacity: 20000000   # 不写则新脚本默认 2e6；旧脚本忽略

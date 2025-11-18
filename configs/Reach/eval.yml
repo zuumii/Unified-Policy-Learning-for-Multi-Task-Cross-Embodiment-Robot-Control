@@ -1,0 +1,22 @@
+env_name: Reach
+robots: Panda
+controller_type: JOINT_VELOCITY
+robot_obs_keys:
+  - robot0_joint_pos_cos
+  - robot0_joint_pos_sin
+obj_obs_keys:
+  - target_to_robot0_eef_pos
+  # - target_pos 
+lat_obs_dim: 6  
+lat_act_dim: 6
+env_kwargs:
+  horizon: 200
+  table_full_size: [0.6, 0.6, 0.05]
+  # gripper_types: Robotiq85TouchGripper
+num_episodes: 200
+model_dir: models/6/Reach/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/step_2000000
+
+
+render_camera: frontview
+
+seed: 0

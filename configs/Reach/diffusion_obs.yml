@@ -1,0 +1,79 @@
+# ===== Diffusion 先验预训练 =====
+expert_folder: human_demonstrations   # 数据根目录（统一入口）
+
+# 源/目标定义：任务名和机器人名应记录清楚（与 align 的 src_env/tgt_env 对齐）
+task_name: Reach
+env_name: Reach
+seed: 42
+
+src_env:
+  robot: Panda
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    - target_to_robot0_eef_pos
+    - target_pos
+
+tgt_env:
+  robot: Sawyer
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    - target_to_robot0_eef_pos
+    - target_pos
+
+# 末端位姿（条件 c）只用这个键
+cond_key: robot0_eef_pos
+
+lat_obs_dim: 6
+lat_act_dim: 6
+
+src_model_dir:  models/6/Reach/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/step_2000000
+# logs/10.26.2025/09-07-49_Reach_Panda_JOINT_VELOCITY_BC/models/step_3480000
+diffusion:
+  # 公共 schedule 定义一个锚点
+  schedule_defaults: &ddpm_default
+    type: ddpm
+    T: 128
+    beta: cosine
+    loss_weight: sigma2
+
+  stats_passes: 2000
+  latent_passes: 2000
+
+  latent:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 1500000
+    batch_size: 16384
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  src_obs:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 1500000
+    batch_size: 16384
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  tgt_obs:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 1500000
+    batch_size: 16384
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  # 训练/验证/保存
+  val_ratio: 0.1
+  log_freq: 1000
+  save_interval: 20000
+  suffix: diffusion_pretrain     # 目录名后缀

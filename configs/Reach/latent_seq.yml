@@ -1,0 +1,55 @@
+expert_folder: human_demonstrations
+task_name: Reach
+env_name: Reach
+seed: 42
+
+src_env:
+  robot: Panda
+  controller_type: JOINT_VELOCITY        # 必须与数据目录名一致
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    - target_to_robot0_eef_pos
+    - target_pos
+
+# 作为训练条件使用（[T,C] 取第一帧；缺失自动补零）
+cond_keys:
+  - target_pos
+
+# 隐空间维度（与已训练 encoder 的输出维度一致即可）
+lat_obs_dim: 6
+lat_act_dim: 6
+
+# 这里应包含 obs_enc.pt 与 act_enc.pt
+src_model_dir: models/6/Reach/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/step_2000000
+
+diffusion:
+  # 训练器核心超参
+  n_layers: 8
+  hidden_dim: 1024
+  steps: 70000
+  batch_size: 128
+  lr: 3.0e-4
+  ema_decay: 0.999
+  log_freq: 1000
+  save_interval: 20000
+
+  # 条件与时间嵌入（新增但可省略）
+  use_condition: true        # 想用 cond_keys 就设 true；不写也会自动判断
+  time_embed_dim: 256
+  cfg_dropout: 0.10          # 仅在 use_condition=true 时生效
+
+  # 调度器（沿用你的锚点）
+  schedule_defaults: &ddpm_default
+    type: ddpm
+    T: 256
+    beta: cosine
+    loss_weight: sigma2
+  schedule: *ddpm_default
+
+suffix: diffusion_pretrain_latent
+
+# 可选杂项（不写有默认）
+num_workers: 4
+drop_static_eps: 1.0e-4

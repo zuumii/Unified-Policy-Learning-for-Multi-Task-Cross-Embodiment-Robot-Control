@@ -1,0 +1,115 @@
+# ===== Diffusion 先验预训练 =====
+expert_folder: human_demonstrations   # 数据根目录（统一入口）
+
+# 源/目标定义：任务名和机器人名应记录清楚（与 align 的 src_env/tgt_env 对齐）
+task_name: Lift
+env_name: Lift
+seed: 42
+
+src_env:
+  robot: Panda
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    # - robot0_eef_pos
+    # - robot0_eef_quat
+    # - robot0_gripper_qpos
+    # - robot0_gripper_qvel
+    - robot0_touch
+    - robot0_gripper_width
+    # - cube_pos
+    # - cube_quat
+    - cube_to_robot0_eef_pos
+    - cube_to_robot0_eef_quat
+    # - robot0_eef_to_cube_yaw
+    - cube_to_target_pos
+tgt_env:
+  robot: Sawyer
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    # - robot0_eef_pos
+    # - robot0_eef_quat
+    # - robot0_gripper_qpos
+    # - robot0_gripper_qvel
+    - robot0_touch
+    - robot0_gripper_width
+    # - cube_pos
+    # - cube_quat
+    - cube_to_robot0_eef_pos
+    - cube_to_robot0_eef_quat
+    # - robot0_eef_to_cube_yaw
+    - cube_to_target_pos
+
+
+lat_obs_dim: 6
+lat_act_dim: 6
+
+
+env_kwargs:
+  horizon: 300
+  table_offset: [0, 0, 0.908]
+  use_touch_obs: true
+  gripper_types: PandaTouchGripper
+  # gripper_types: Robotiq85TouchGripper
+
+
+src_model_dir: models/6/Lift/23-38-15_Lift_Panda_JOINT_VELOCITY_BC/models/step_1640000
+
+diffusion:
+
+  cond:
+    keys:
+      - robot0_eef_pos
+      - robot0_eef_quat  
+      - eef_action_vel  
+     # - target_to_robot0_eef_pos
+  schedule_defaults: &ddpm_default
+    type: ddpm
+    T: 128
+    beta: cosine
+    loss_weight: sigma2
+
+  stats_passes: 2000
+  latent_passes: 2000
+
+  # 三路：latent_act / src_act / tgt_act
+  latent_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  src_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  tgt_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  # 训练/日志
+  val_ratio: 0.1
+  log_freq: 1000
+  save_interval: 20000
+
+suffix: diffusion_pretrain_joint_ang
+
+

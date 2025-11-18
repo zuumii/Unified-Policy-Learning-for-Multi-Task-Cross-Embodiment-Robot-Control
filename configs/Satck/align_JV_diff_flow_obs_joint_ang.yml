@@ -1,0 +1,185 @@
+# =================== Align（Panda -> Sawyer）===================
+env_name: Stack
+
+env_kwargs:
+  horizon: 300
+  use_touch_obs: true
+  table_offset: [0, 0, 0.908]
+  gripper_types: PandaTouchGripper
+  # gripper_types: Robotiq85TouchGripper
+
+# -------- 源 / 目标域观测键（保持一致的 obj_obs 部分）--------
+src_env:
+  robot: Panda
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    # - robot0_eef_pos
+    # - robot0_eef_quat
+    # - robot0_gripper_qpos
+    # - robot0_gripper_qvel
+    - robot0_touch
+    - robot0_gripper_width
+    # - cubeA_pos
+    # - cubeA_quat
+    # - cubeB_pos
+    # - cubeB_quat
+    - gripper_to_cubeA
+    - gripper_to_cubeB
+    - cubeA_to_cubeB
+    - eef_to_cubeA_yaw
+    # 可选（若用就别重复单项键）： object-state
+    # - object-state
+
+tgt_env:
+  robot: Sawyer
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    # - robot0_eef_pos
+    # - robot0_eef_quat
+    # - robot0_gripper_qpos
+    # - robot0_gripper_qvel
+    - robot0_touch
+    - robot0_gripper_width
+    # - cubeA_pos
+    # - cubeA_quat
+    # - cubeB_pos
+    # - cubeB_quat
+    - gripper_to_cubeA
+    - gripper_to_cubeB
+    - cubeA_to_cubeB
+    - eef_to_cubeA_yaw
+    # 可选（若用就别重复单项键）： object-state
+    # - object-state
+
+
+# -------- 数据与模型 --------
+src_buffer: human_demonstrations/Stack/Panda/JOINT_VELOCITY
+tgt_buffer: human_demonstrations/Stack/Sawyer/JOINT_VELOCITY
+
+# 与源 TD3 模型保持一致（很关键）
+lat_obs_dim: 6
+lat_act_dim: 6
+
+# 训练步数与批量
+tgt_align_timesteps: 300001
+batch_size: 4096
+
+# 冷启动所需的源模型（从这里加载并冻结 E_src / D_src / dyn / actor 等）
+src_model_dir: models/6/Stack/23-47-54_Stack_Panda_JOINT_VELOCITY_BC/models/step_1800000
+
+cond:
+  keys:
+    - robot0_eef_pos
+    - robot0_eef_quat
+    - eef_action_vel
+  strict_dim_check: true
+
+
+
+# 其他常规项
+seed: 42
+save_buffer: false
+logdir_prefix: null
+log_freq: 1000
+
+evaluation:
+  interval: 2000
+  episodes: 8
+  save_interval: 20000
+
+
+suffix: align_cycle
+
+# =================== 续训（读取本脚本生成的 ckpt）===================
+# - 只恢复“目标侧生成器 + 判别器 + 优化器”的训练态
+# - 源侧模块依然从 src_model_dir 读取并冻结
+resume:
+  enabled: false
+  # 可以指到 logs/.../models 或者直接指到某个 step_xxxxxx 目录
+  dir: models/6/Reach/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/step_2000000
+
+# =================== SEW（两预测器；无几何；生成器端）===================
+# 只在生成器端加入两项：
+#   1) 交叉一致（最重要）：σ_tgt(D_tgt(E_src(x_src))) ≈ σ_src(x_src)
+#   2) 循环一致（辅助）：  σ_tgt(D_tgt(E_src(D_src(E_tgt(x_tgt))))) ≈ σ_tgt(x_tgt)
+# 其中 teacher 分支 detach，student 分支保留梯度，梯度仅回流到目标侧生成器。
+sew:
+  enabled: false
+  lambda: 5           # 总的 SEW 权重 
+  ratio_cross: 1.5      # 交叉一致在 SEW 内部的占比（强烈建议高一些）
+  ratio_self: 0.0       # 循环一致在 SEW 内部的占比
+  every: 1              # 每几步计算一次 SEW；=1 表示每步
+  max_batch: 4096       # 子采样上限；若想全批次训练 SEW，可配合 train_all:true
+  train_all: true      # true 则忽略 max_batch/ every，步步全批次（更慢但最稳）
+
+  # 源/目标域的 SEW 预测器（请改为你的实际权重路径）
+  src_predictor:
+    path: models/predictor/sew_predictor_UR5e.pt
+    # 如小模型训练时做过标准化，可补充：
+    # norm:
+    #   mean: [ ... ]
+    #   std:  [ ... ]
+
+  tgt_predictor:
+    path: models/predictor/sew_predictor_Panda.pt
+    # norm:
+    #   mean: [ ... ]
+    #   std:  [ ... ]
+
+# =================== 新增：Diffusion 先验（与 GAN 并存，可开关/加权）===================
+# 先验来自你跑的 diffusion_pretrain 脚本；dir 指到那次日志目录
+# =================== 先验权重目录（4 路） ===================
+diffusion_priors:
+  # dir: logs/11.03.2025/23-51-39_Reach_Panda_JOINT_VELOCITY_Sawyer_JOINT_VELOCITY_diffusion_pretrain_act
+  dir: logs/11.05.2025/22-36-13_Reach_Panda_JOINT_VELOCITY_Sawyer_JOINT_VELOCITY_diffusion_pretrain_act
+  use_ema: true
+
+
+
+# =================== 对齐损失总控（GAN + Diff + Flow） ===================
+align_loss:
+  gan:
+    enabled: false
+    lambda: 
+    lat: 1.0
+    src: 1.0
+    tgt: 1.0 
+
+  diffusion:
+    enabled: true
+    lambda: { lat: 1.5, src: 3, tgt: 0.5 }
+    schedule_override:
+      use_override: false
+      T: 128
+      beta: cosine
+      loss_weight: sigma2
+
+
+  cycle:
+    lambda: 5
+
+  dynamics:
+    lambda: 5
+
+# ===================（可选）优化/网络规模（若不写，脚本里用默认）===================
+# n_layers: 3
+# hidden_dim: 256
+# lr: 3.0e-4
+# lmbd_gp: 10
+# sew_huber_delta: null
+
+grip_head:
+  enabled: true            # 是否启用夹爪头
+  trainable: true          # 是否在对齐训练中做独立的 BC 训练
+  lr: 3e-4                 # 夹爪头学习率（仅当 trainable=true）
+  w_src: 1.0               # 源域 BC 权重
+  w_tgt: 1.0               # 目标域 BC 权重
+  load_from_src: true      # 若存在 src_model_dir/grip_head.pt 则先加载
+  batch_size: 256          # 夹爪 BC 的批大小（独立于主 batch）
+  dataset_max_steps: 200000  # 可选：从 demos 下采样最多多少步用于 grip 训练（防内存爆）

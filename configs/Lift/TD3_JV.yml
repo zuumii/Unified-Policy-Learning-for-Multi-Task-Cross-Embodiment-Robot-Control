@@ -1,0 +1,114 @@
+# configs/Lift/td3_sew.yml
+env_name: Lift
+expert_folder: human_demonstrations
+robots: Panda
+controller_type: JOINT_VELOCITY
+
+# ========= RL 训练规模 =========
+total_timesteps: 100000000
+batch_size: 256
+
+# ========= 观测键（与 Lift-BC 对齐）=========
+robot_obs_keys:
+  - robot0_joint_pos_cos
+  - robot0_joint_pos_sin
+obj_obs_keys:
+  # - robot0_eef_pos
+  # - robot0_eef_quat
+  # - robot0_gripper_qpos
+  # - robot0_gripper_qvel
+  - robot0_touch
+  - robot0_gripper_width
+  # - cube_pos
+  # - cube_quat
+  - cube_to_robot0_eef_pos
+  - cube_to_robot0_eef_quat
+  # - robot0_eef_to_cube_yaw
+  - cube_to_target_pos
+# ========= 潜变量维度（与 Lift-BC 对齐）=========
+lat_obs_dim: 6
+lat_act_dim: 6
+
+# ========= 环境参数（与 Lift-BC 对齐）=========
+env_kwargs:
+  horizon: 300
+  table_offset: [0, 0, 0.908]
+  use_touch_obs: true
+  gripper_types: PandaTouchGripper
+
+# ========= 评估 / 日志 =========
+evaluation:
+  interval: 10000
+  save_interval: 20000
+seed: 42
+save_buffer: false
+logdir_prefix: null
+suffix: TD3
+
+# ========= 冷启动（从 BC 复用 enc/dec 等并冻结）=========
+# 若想从头训：把下面这一行改成 null
+pretrained_from: models/6/Reach/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/step_2000000
+
+# ========= TD3 基本超参 =========
+discount: 0.99
+tau: 0.002
+expl_noise: 0.05
+policy_noise: 0.2
+noise_clip: 0.5
+actor_update_freq: 2
+critic_update_freq: 1
+
+# ========= 结构（与 BC 对齐）=========
+actor_n_layers: 3
+actor_hidden_dim: 256
+
+log_freq: 1000
+grad_clip: 1.0
+
+# ========= （可选）是否把专家数据加入 RL 阶段的 buffer =========
+use_demos_in_rl: true
+
+# ========= SEW：只用于约束，预测器复用 & 冻结 =========
+sew:
+  enabled: false
+  lambda: 0.2          # TD3 actor loss 上叠加的 SEW 权重（和 BC 保持一致，后续可再调）
+  action_scale: 0.5    # 速度控制下，一步近似：q_{t+1} = q_t + scale * action
+  hz: 20               # 控制频率（用于 dt = 1 / hz）
+
+  model:
+    # 如果想复用你在 Lift-BC 中训练或指定的小模型，保持如下路径 + train: false
+    path: models/predictor/sew_predictor_UR5e.pt
+    train: false
+    hidden: 256
+    lr: 0.001
+    batch_size: 4096
+    epochs: 8
+
+# ========= SEW 几何（与 Lift-BC 对齐；by_index 从 0 起）=========
+sew_geom:
+  S:
+    type: base
+    offset: [0.0, 0.0, 0.0]
+  E_joint:
+    select: by_index
+    index: 2
+    point: joint_pos
+    offset: [0.0, 0.0, 0.0]
+  W_joint:
+    select: by_index
+    index: 5
+    point: joint_pos
+    offset: [0.0, 0.0, 0.0]
+  ref_dir_local:
+    type: base
+    vec: [0.0, 0.0, 1.0]
+
+    # =====================================================================
+# =================== 仅“新脚本”（train_rl_batch.py）读取 ===================
+# =====================================================================
+epoch_steps: 2500          # 每个 epoch 收集的环境步数
+trains_per_epoch: 1000     # 每个 epoch 的 update 次数
+max_path_length: 200       # 一般与 horizon 一致
+eval_episodes: 5
+save_every_epochs: 10
+replay_capacity: 2000000   # 不写则新脚本默认 2e6；旧脚本忽略

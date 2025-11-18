@@ -1,0 +1,173 @@
+# =================== Align+RL（UR5e -> Panda）===================
+env_name: Reach
+
+env_kwargs:
+  horizon: 200
+  table_full_size: [0.6, 0.6, 0.05]
+
+# -------- 源 / 目标域观测键（保持一致的 obj_obs 部分）--------
+src_env:
+  robot: UR5e
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    - target_to_robot0_eef_pos
+    - target_pos
+
+tgt_env:
+  robot: Panda
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    - target_to_robot0_eef_pos
+    - target_pos
+
+# -------- 数据与模型 --------
+src_buffer: human_demonstrations/Reach/UR5e/JOINT_VELOCITY    # 源专家（teacher）
+tgt_buffer: human_demonstrations/Reach/Panda/JOINT_VELOCITY   # 目标专家（BC warmup）
+src_model_dir: logs/10.18.2025/17-56-47_Reach_UR5e_JOINT_VELOCITY_BC/models/step_0620000
+
+# 与源 TD3 模型保持一致（很关键）
+lat_obs_dim: 6
+lat_act_dim: 6
+
+# 训练步数与批量（总步数=各阶段 steps 之和）
+total_timesteps: 250000
+batch_size: 4096
+
+# 其他常规项
+seed: 42
+save_buffer: false
+logdir_prefix: null
+log_freq: 1000
+
+evaluation:
+  interval: 2000
+  save_interval: 20000
+  eval_episodes: 8
+
+suffix: align_bc_rl
+
+# =================== 续训 ===================
+resume:
+  enabled: false
+  dir: logs/10.20.2025/..../models/step_0028000
+
+# =================== phases（三阶段：BC -> Mix -> RL）===================
+phases:
+  - name: bc
+    steps: 4000
+    collect_env: false
+    beta_bc: 1.0
+    demo_updates_per_step: 1      # 目前代码走“混合一次更新”，这两个字段保留兼容
+    self_updates_per_step: 0
+    expl_noise: 0.0
+    gripper_noise_std: 0.0
+
+  - name: mix
+    steps: 100000
+    collect_env: true
+    beta_bc_start: 1.0
+    beta_bc_end: 0.0
+    demo_updates_per_step: 1
+    self_updates_per_step: 1
+    expl_noise: 0.1
+    gripper_noise_std: 0.02
+
+  - name: rl
+    steps: 240000
+    collect_env: true
+    beta_bc: 0.0
+    demo_updates_per_step: 0
+    self_updates_per_step: 1
+    expl_noise: 0.1
+    gripper_noise_std: 0.02
+
+# =================== 交互收集（与 train 代码匹配）===================
+# 代码优先读 rl.interact；没写时会回落到 rollout.*（这里两处都给，任一可用）
+rl:
+  expl_noise: 0.1
+  gripper_noise_std_interact: 0.02
+  discount: 0.99
+  tau: 0.005
+  policy_noise: 0.2
+  noise_clip: 0.5
+  n_layers: 3
+  hidden_dim: 256
+  lr: 3.0e-4
+  interact:
+    init_random_steps: 2000
+    collect_per_step: 1
+    max_ep_len: 200
+    replay_capacity: 1000000
+
+rollout:
+  per_step_env_steps: 1
+  start_after: 2000
+  collect_every: 1
+
+# =================== 分阶段损失权重（train 会逐步覆盖到 aligner）===================
+lmbd_cyc: 1.0
+lmbd_dyn: 1.0
+lmbd_sew: 2.0   # 兜底值；若 sew.lambda/overrides 有该阶段值，会覆盖它
+
+lmbd_overrides:
+  bc:
+    cyc: 1.0
+    dyn: 1.0
+    sew: 5.0
+  mix:
+    cyc: 10.0
+    dyn: 10.0
+    sew: 2.0
+  rl:
+    cyc: 10.0
+    dyn: 10.0
+    sew: 1.0
+
+# =================== SEW（teacher 预测器；其余字段按 aligner 读取）===================
+sew:
+  enabled: false
+  # 关键：分阶段 λ，确保 SEW 不再恒为 0
+  lambda:
+    bc: 5.0
+    mix: 2.0
+    rl: 1.0
+  ratio_cross: 1.5
+  ratio_self: 0.0
+  every: 1
+  max_batch: 4096
+  train_all: true
+  input: "robot_obs"
+  src_predictor:
+    path: models/predictor/sew_predictor_UR5e.pt
+  tgt_predictor:
+    path: models/predictor/sew_predictor_Panda.pt
+# 可选：SmoothL1 的 huber delta（若需要）
+# sew_huber_delta: 0.5
+
+# =================== BC 子项（aligner 内用于 BC 项拼权）===================
+bc:
+  w_act_bc: 1.0
+  w_act_ae: 0.2
+  w_obs_rec: 0.2
+  w_cycle: 1.0
+  w_dyn_inv: 1.0
+  w_dyn_fwd: 1.0
+  gripper_weight: 1.0
+  latent_bc:
+    enabled: false
+    weight: 0.3
+
+# =================== latent action 正则（aligner 读取为 latent_sq_*）===================
+latent_action_reg:
+  enabled: true
+  target_mean_square: 0.3
+  weight: 0.05
+
+latent_sq_target: 0.3
+latent_sq_weight: 0.05

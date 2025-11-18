@@ -1,0 +1,33 @@
+plot:
+  key: a_arm         # 或 obs_flat / a_env / a_arm / z_obs / z_act / z_obs_act
+  mode: per-step          # 或 per-episode-mean
+  # mode: per-episode-mean          # 或 per-episode-mean
+  out_dir: ./tsne_out
+  seed: 42
+  max_per_traj: 200
+  use_pca: false
+  pca_dim: 50
+  coral: ture           # 如要更“像”，可设 true
+  balance_by_label: true
+  max_samples_per_label: 8000
+  perplexity: 25
+  n_iter: 1500
+  metric: euclidean       # 或 cosine
+  learning_rate: auto
+  init: pca
+  point_size: 6
+  alpha: 0.4
+  legend_loc: best
+
+runs:
+  - name: Panda
+    traj_dir: logs/23-34-38_Reach_Panda_JOINT_VELOCITY_BC/models/eval_20251111_154652/traj_npz
+    color: "#1f77b4"
+
+  - name: Sawyer
+    traj_dir: logs/11.11.2025/14-21-19_Reach_Panda_JOINT_VELOCITY_Sawyer_JOINT_VELOCITY_align_cycle/models/eval_20251111_150024/traj_npz
+    color: "#d62728"
+
+  # - name: xArm6
+  #   traj_dir: /path/to/eval_xArm6/traj_npz
+  #   color: "#2ca02c"

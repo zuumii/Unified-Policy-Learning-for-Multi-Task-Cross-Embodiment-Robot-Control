@@ -1,0 +1,22 @@
+cd /path/to/your/project
+
+# 新建或编辑 .gitignore
+cat > .gitignore << 'EOF'
+# —— 不要上传的大目录 ——
+human_demonstrations/
+logs/
+renders/
+run_cfgs/
+run_logs/
+
+# 常见无用文件（可选）
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.DS_Store
+.env
+.venv/
+venv/
+EOF

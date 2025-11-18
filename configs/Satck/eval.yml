@@ -1,0 +1,36 @@
+env_name: Stack
+robots: Panda
+controller_type: JOINT_VELOCITY
+robot_obs_keys:
+  - robot0_joint_pos_cos
+  - robot0_joint_pos_sin
+obj_obs_keys:
+  # - robot0_eef_pos
+  # - robot0_eef_quat
+  # - robot0_gripper_qpos
+  # - robot0_gripper_qvel
+  - robot0_touch
+  - robot0_gripper_width
+  # - cubeA_pos
+  # - cubeA_quat
+  # - cubeB_pos
+  # - cubeB_quat
+  - gripper_to_cubeA
+  - gripper_to_cubeB
+  - cubeA_to_cubeB
+  - eef_to_cubeA_yaw
+  # 可选（若用就别重复单项键）： object-state
+  # - object-state
+lat_obs_dim: 6  
+lat_act_dim: 6
+env_kwargs:
+  horizon: 300
+  use_touch_obs: true
+  table_offset: [0, 0, 0.908]
+  gripper_types: PandaTouchGripper
+  # gripper_types: Robotiq85TouchGripper
+
+num_episodes: 10
+model_dir: logs/11.13.2025/11-12-51_Stack_Panda_JOINT_VELOCITY_TD3_SEW/models/step_1860000
+seed: 42
+render_camera: frontview

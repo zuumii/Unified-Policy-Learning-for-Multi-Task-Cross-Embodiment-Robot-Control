@@ -1,0 +1,38 @@
+env_name: Lift
+robots: Sawyer
+controller_type: JOINT_VELOCITY
+robot_obs_keys:
+- robot0_joint_pos_cos
+- robot0_joint_pos_sin
+obj_obs_keys:
+  # - robot0_eef_pos
+  # - robot0_eef_quat
+  # - robot0_gripper_qpos
+  # - robot0_gripper_qvel
+  - robot0_touch
+  - robot0_gripper_width
+  # - cube_pos
+  # - cube_quat
+  - cube_to_robot0_eef_pos
+  - cube_to_robot0_eef_quat
+  # - robot0_eef_to_cube_yaw
+  - cube_to_target_pos
+
+lat_obs_dim: 6  
+lat_act_dim: 6
+env_kwargs:
+  horizon: 200
+  table_offset: [0, 0, 0.908]
+  use_touch_obs: true
+  gripper_types: PandaTouchGripper
+  # gripper_types: Robotiq85TouchGripper
+num_episodes: 10
+model_dir: logs/11.11.2025/17-59-36_Lift_Sawyer_JOINT_VELOCITY_BC/models/step_0980000
+
+
+seed: 42
+render_camera: frontview
+gripper:
+  enabled: true
+#   path: /path/to/src_model/grip_head.pt   # 可选；若缺失会尝试 src_model_dir/grip_head.pt
+# src_model_dir: /path/to/src_model         # 可选的备用来源

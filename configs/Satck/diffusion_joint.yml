@@ -1,0 +1,119 @@
+# ===== Diffusion 先验预训练 =====
+expert_folder: human_demonstrations   # 数据根目录（统一入口）
+
+# 源/目标定义：任务名和机器人名应记录清楚（与 align 的 src_env/tgt_env 对齐）
+task_name: Stack
+env_name: Stack
+seed: 42
+
+src_env:
+  robot: Panda
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    # - robot0_eef_pos
+    # - robot0_eef_quat
+    # - robot0_gripper_qpos
+    # - robot0_gripper_qvel
+    - robot0_touch
+    - robot0_gripper_width
+    # - cubeA_pos
+    # - cubeA_quat
+    # - cubeB_pos
+    # - cubeB_quat
+    - gripper_to_cubeA
+    - gripper_to_cubeB
+    - cubeA_to_cubeB
+    - eef_to_cubeA_yaw
+    # 可选（若用就别重复单项键）： object-state
+    # - object-state
+
+tgt_env:
+  robot: Sawyer
+  controller_type: JOINT_VELOCITY
+  robot_obs_keys:
+    - robot0_joint_pos_cos
+    - robot0_joint_pos_sin
+  obj_obs_keys:
+    # - robot0_eef_pos
+    # - robot0_eef_quat
+    # - robot0_gripper_qpos
+    # - robot0_gripper_qvel
+    - robot0_touch
+    - robot0_gripper_width
+    # - cubeA_pos
+    # - cubeA_quat
+    # - cubeB_pos
+    # - cubeB_quat
+    - gripper_to_cubeA
+    - gripper_to_cubeB
+    - cubeA_to_cubeB
+    - eef_to_cubeA_yaw
+    # 可选（若用就别重复单项键）： object-state
+    # - object-state
+
+env_kwargs:
+  horizon: 300
+  use_touch_obs: true
+  table_offset: [0, 0, 0.908]
+  gripper_types: PandaTouchGripper
+  # gripper_types: Robotiq85TouchGripper
+
+
+lat_obs_dim: 6
+lat_act_dim: 6
+
+src_model_dir: models/6/Stack/23-47-54_Stack_Panda_JOINT_VELOCITY_BC/models/step_1800000
+
+diffusion:
+
+  cond:
+    keys:
+      - robot0_eef_pos
+      - eef_action_vel  
+     # - target_to_robot0_eef_pos
+  schedule_defaults: &ddpm_default
+    type: ddpm
+    T: 128
+    beta: cosine
+    loss_weight: sigma2
+
+  stats_passes: 2000
+  latent_passes: 2000
+
+  # 三路：latent_act / src_act / tgt_act
+  latent_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  src_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  tgt_act:
+    n_layers: 5
+    hidden_dim: 1024
+    steps: 700000
+    batch_size: 4096
+    lr: 3.0e-4
+    ema_decay: 0.999
+    schedule: *ddpm_default
+
+  # 训练/日志
+  val_ratio: 0.1
+  log_freq: 1000
+  save_interval: 20000
+
+suffix: diffusion_pretrain_joint

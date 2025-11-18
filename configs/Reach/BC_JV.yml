@@ -1,0 +1,89 @@
+env_name: Reach
+expert_folder: human_demonstrations
+robots: Sawyer
+controller_type: JOINT_VELOCITY
+total_timesteps: 20000000
+batch_size: 512
+
+robot_obs_keys:
+  - robot0_joint_pos_cos
+  - robot0_joint_pos_sin
+obj_obs_keys:
+  - target_to_robot0_eef_pos
+  # - target_pos
+
+# pretrained_from: logs/10.27.2025/23-34-18_Reach_Panda_JOINT_VELOCITY_BC/models/step_1940000   # 目录里有多个 *.pt（见下）
+
+pretrained:
+  load_grip_head: false    # 设成 false 就完全不加载 grip_head
+  freeze_grip_head: false  # 加载的情况下，是否冻结（一般不冻结要训练）
+gripper:
+  enabled: true            # 走外接夹爪头
+  lr: 1e-3
+  update_every: 1
+
+
+
+lat_obs_dim: 6
+lat_act_dim: 6
+
+env_kwargs:
+  horizon: 200
+  table_full_size: [0.6, 0.6, 0.05]
+
+n_layers: 3
+hidden_dim: 256
+actor_n_layers: 2
+actor_hidden_dim: 256
+
+
+evaluation:
+  interval: 10000
+  save_interval: 20000
+seed: 42
+save_buffer: False
+logdir_prefix: null
+suffix: BC_Sawyer
+
+
+
+
+# ========= 新增：SEW 功能开关与训练设置 =========
+sew:
+  enabled: false          # 开启 SEW 小模型与 L_sew 约束
+  lambda: 0.2            # L_total = L_bc + lambda * L_sew
+
+  model:
+    # 若提供外来模型：将按其 state_dict 自动推断 in_dim/depth/各层维度并打印，
+    # 与当前环境(n关节)检查 in_dim == n-1，不一致会报错。
+    path: models/predictor/sew_predictor_UR5e.pt
+
+    train: false          # true=在外来模型上继续训练；false=只加载不训练
+
+    # ↓ 仅“从零训练”时生效；如果给了 path，这两个会被忽略（只用于打印/提示，不参与构图）
+    hidden: 256          # 隐藏层宽度（当 depth>1 时用于中间层）
+    depth: 3             # 线性层数；示例=3 -> [in]->hidden->hidden->out(1)
+    lr: 0.001
+    batch_size: 4096
+    epochs: 8
+
+# ========= 新增：SEW 几何定义 =========
+sew_geom:
+  S:
+    type: base
+    offset: [0.0, 0.0, 0.0]
+  E_joint:
+    select: by_index
+    index: 2
+    point: joint_pos
+    offset: [0.0, 0.0, 0.0]
+  W_joint:
+    select: by_index
+    index: 5
+    point: joint_pos
+    offset: [0.0, 0.0, 0.0]
+  ref_dir_local:
+    type: base
+    vec: [0.0, 0.0, 1.0]
+
+

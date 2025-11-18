@@ -1,0 +1,107 @@
+# ========= 必要信息 =========
+env_name: Stack
+expert_folder: human_demonstrations
+robots: Panda
+controller_type: JOINT_VELOCITY
+
+total_timesteps: 50000000
+batch_size: 512
+seed: 42
+
+# ========= 观测键（尽量加满）=========
+robot_obs_keys:
+  - robot0_joint_pos_cos
+  - robot0_joint_pos_sin
+obj_obs_keys:
+  # - robot0_eef_pos
+  # - robot0_eef_quat
+  # - robot0_gripper_qpos
+  # - robot0_gripper_qvel
+  - robot0_touch
+  - robot0_gripper_width
+  # - cubeA_pos
+  # - cubeA_quat
+  # - cubeB_pos
+  # - cubeB_quat
+  - gripper_to_cubeA
+  - gripper_to_cubeB
+  - cubeA_to_cubeB
+  - eef_to_cubeA_yaw
+  # 可选（若用就别重复单项键）： object-state
+  # - object-state
+
+# ========= 环境参数 =========
+env_kwargs:
+  horizon: 300
+  use_touch_obs: true
+  table_offset: [0, 0, 0.908]
+  gripper_types: PandaTouchGripper
+  # gripper_types: Robotiq85TouchGripper
+# ========= 网络规模 =========
+n_layers: 3
+hidden_dim: 256
+actor_n_layers: 4
+actor_hidden_dim: 512
+
+lat_obs_dim: 6
+lat_act_dim: 6
+
+
+# ========= 评估与保存 =========
+evaluation:
+  interval: 10000
+  save_interval: 20000
+logdir_prefix: null
+suffix: TD3_SEW
+
+# ===== TD3 基本超参 =====
+agent: td3_obsact
+discount: 0.99
+tau: 0.005
+expl_noise: 0.05
+policy_noise: 0.2
+noise_clip: 0.5
+actor_update_freq: 2
+critic_update_freq: 1
+log_freq: 1000
+lr: 0.0003
+
+# demos 预填充占位（见上一个说明）
+# use_demos_in_rl: false
+
+# 冷启动（如需从 BC 冻结/微调，改成 BC 的 models/step_xxxxxx；null = 从头训练）
+pretrained_from: models/6/Stack/23-47-54_Stack_Panda_JOINT_VELOCITY_BC/models/step_1800000
+
+
+# ========= SEW：开关 + 小模型训练/加载 =========
+sew:
+  enabled: false
+  lambda: 0.2
+  action_scale: 0.5
+  hz: 20
+
+  model:
+    path: models/predictor/sew_predictor_UR5e.pt    # 若你已有对应任务的 pt，可填路径并把 train 设为 false
+    train: false
+    hidden: 256
+    lr: 0.001
+    batch_size: 4096
+    epochs: 8
+
+# ========= SEW 几何 =========
+sew_geom:
+  S: { type: base, offset: [0.0, 0.0, 0.0] }
+  E_joint: { select: by_index, index: 2, point: joint_pos, offset: [0.0, 0.0, 0.0] }
+  W_joint: { select: by_index, index: 5, point: joint_pos, offset: [0.0, 0.0, 0.0] }
+  ref_dir_local: { type: base, vec: [0.0, 0.0, 1.0] }
+
+
+  # =====================================================================
+# =================== 仅“新脚本”（train_rl_batch.py）读取 ===================
+# =====================================================================
+epoch_steps: 2500          # 每个 epoch 收集的环境步数
+trains_per_epoch: 1000     # 每个 epoch 的 update 次数
+max_path_length: 200       # 一般与 horizon 一致
+eval_episodes: 5
+save_every_epochs: 10
+replay_capacity: 200000000   # 不写则新脚本默认 2e6；旧脚本忽略
